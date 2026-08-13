@@ -1,6 +1,6 @@
 const { db } = require('./db');
 const { getAuthorizedClient } = require('./googleAuth');
-const { buildDriveClient, listFilesInFolder } = require('./driveConnector');
+const { buildDriveClient, listFilesInFolder, revokeNonOwnerPermissions } = require('./driveConnector');
 
 function computeStatus(submittedAt, deadlineAt, onTimeWindowHours) {
   const deadline = new Date(deadlineAt);
@@ -31,7 +31,7 @@ async function getDrive() {
     throw new Error('No Google account connected yet — click "Connect Google Drive" on the dashboard first.');
   }
   const authClient = await getAuthorizedClient(tokenResult.rows[0].refresh_token);
-  return buildDriveClient(authClient);
+  return { drive: buildDriveClient(authClient), connectedEmail: tokenResult.rows[0].google_email };
 }
 
 async function getOrCreateGroup(subjectId, name) {
@@ -47,9 +47,10 @@ async function getOrCreateGroup(subjectId, name) {
   return { id: Number(inserted.lastInsertRowid), isNew: true };
 }
 
-async function syncTask(drive, task) {
+async function syncTask(drive, task, connectedEmail) {
   let filesScanned = 0;
   let eventsCreated = 0;
+  let eventsRenamed = 0;
   let groupsDiscovered = 0;
   const nowIso = new Date().toISOString();
 
@@ -62,13 +63,29 @@ async function syncTask(drive, task) {
     if (isNew) groupsDiscovered += 1;
 
     const status = computeStatus(file.createdTime, task.deadline_at, task.on_time_window_hours);
-    const result = await db.execute({
-      sql: `INSERT OR IGNORE INTO submission_events
-              (event_key, task_id, group_id, drive_file_id, file_name, submitted_at, status, web_view_link, first_observed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      args: [file.id, task.id, groupId, file.id, file.name, file.createdTime, status, file.webViewLink || null, nowIso]
+    const existing = await db.execute({
+      sql: 'SELECT file_name FROM submission_events WHERE event_key = ?',
+      args: [file.id]
     });
-    if (result.rowsAffected > 0) eventsCreated += 1;
+
+    if (existing.rows.length === 0) {
+      await db.execute({
+        sql: `INSERT INTO submission_events
+                (event_key, task_id, group_id, drive_file_id, file_name, submitted_at, status, web_view_link, first_observed_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [file.id, task.id, groupId, file.id, file.name, file.createdTime, status, file.webViewLink || null, nowIso]
+      });
+      eventsCreated += 1;
+    } else if (existing.rows[0].file_name !== file.name) {
+      // Same Drive file, renamed since we first saw it (e.g. corrected to match group naming).
+      // Refresh the identifying metadata, but first_observed_at/submitted_at/status stay as the
+      // original audit facts — a rename doesn't change when or how on-time the submission was.
+      await db.execute({
+        sql: 'UPDATE submission_events SET group_id = ?, file_name = ?, web_view_link = ? WHERE event_key = ?',
+        args: [groupId, file.name, file.webViewLink || null, file.id]
+      });
+      eventsRenamed += 1;
+    }
   }
 
   // Finalize "Missing" once deadline + grace period has fully passed, for every known
@@ -94,9 +111,35 @@ async function syncTask(drive, task) {
       });
       if (result.rowsAffected > 0) eventsCreated += 1;
     }
+
+    // Revoke Drive access once, the same run that finalizes Missing — never retried once it
+    // succeeds (access_revoked_at is set), retried automatically on the next sync if it failed
+    // (e.g. scope not yet upgraded), and never allowed to abort the rest of this task's sync.
+    if (!task.access_revoked_at) {
+      try {
+        const revoked = await revokeNonOwnerPermissions(drive, task.drive_folder_id, connectedEmail);
+        const revokedAt = new Date().toISOString();
+        for (const r of revoked) {
+          if (!r.ok) continue;
+          await db.execute({
+            sql: 'INSERT INTO access_revocations (task_id, permission_id, permission_type, email_address, revoked_at) VALUES (?, ?, ?, ?, ?)',
+            args: [task.id, r.id, r.type, r.emailAddress, revokedAt]
+          });
+        }
+        await db.execute({
+          sql: 'UPDATE tasks SET access_revoked_at = ?, access_revoke_error = NULL WHERE id = ?',
+          args: [revokedAt, task.id]
+        });
+      } catch (err) {
+        await db.execute({
+          sql: 'UPDATE tasks SET access_revoke_error = ? WHERE id = ?',
+          args: [String(err.message || err), task.id]
+        });
+      }
+    }
   }
 
-  return { filesScanned, eventsCreated, groupsDiscovered };
+  return { filesScanned, eventsCreated, eventsRenamed, groupsDiscovered };
 }
 
 async function runSync() {
@@ -116,15 +159,16 @@ async function runSync() {
         sql: 'UPDATE sync_log SET finished_at = ?, tasks_scanned = 0 WHERE id = ?',
         args: [new Date().toISOString(), logId]
       });
-      return { tasksScanned: 0, filesScanned: 0, eventsCreated: 0, groupsDiscovered: 0 };
+      return { tasksScanned: 0, filesScanned: 0, eventsCreated: 0, eventsRenamed: 0, groupsDiscovered: 0 };
     }
 
-    const drive = await getDrive();
-    const totals = { filesScanned: 0, eventsCreated: 0, groupsDiscovered: 0 };
+    const { drive, connectedEmail } = await getDrive();
+    const totals = { filesScanned: 0, eventsCreated: 0, eventsRenamed: 0, groupsDiscovered: 0 };
     for (const task of tasks) {
-      const r = await syncTask(drive, task);
+      const r = await syncTask(drive, task, connectedEmail);
       totals.filesScanned += r.filesScanned;
       totals.eventsCreated += r.eventsCreated;
+      totals.eventsRenamed += r.eventsRenamed;
       totals.groupsDiscovered += r.groupsDiscovered;
     }
 

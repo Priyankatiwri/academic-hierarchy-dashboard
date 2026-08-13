@@ -1,8 +1,26 @@
 const express = require('express');
+const multer = require('multer');
 const { db } = require('../db');
 const { runSync } = require('../sync');
 
 const router = express.Router();
+
+const evidenceUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 }, // 8MB — generous for a screenshot, guards against runaway storage growth
+  fileFilter: (req, file, cb) => {
+    if (/^image\//.test(file.mimetype)) cb(null, true);
+    else cb(new Error('Only image files are accepted for evidence screenshots.'));
+  }
+}).single('screenshot');
+
+/** multer errors land in Express's error-handling path by default — route them through our own JSON error shape instead. */
+function handleEvidenceUpload(req, res, next) {
+  evidenceUpload(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}
 
 function asyncHandler(fn) {
   return (req, res) => fn(req, res).catch(err => {
@@ -147,23 +165,52 @@ router.get('/tasks/:id/submissions', asyncHandler(async (req, res) => {
   }));
 
   const evidence = await db.execute({
-    sql: 'SELECT e.*, g.name AS group_name FROM evidence_notes e LEFT JOIN student_groups g ON g.id = e.group_id WHERE e.task_id = ? ORDER BY e.created_at DESC',
+    sql: `SELECT e.id, e.task_id, e.group_id, e.note, e.created_at, e.screenshot_content_type,
+                 CASE WHEN e.screenshot IS NOT NULL THEN 1 ELSE 0 END AS has_screenshot,
+                 g.name AS group_name
+          FROM evidence_notes e
+          LEFT JOIN student_groups g ON g.id = e.group_id
+          WHERE e.task_id = ?
+          ORDER BY e.created_at DESC`,
     args: [taskId]
   });
 
   res.json({ task: task.rows[0], cells, evidence: evidence.rows });
 }));
 
-// ---- Evidence notes (Prof's screenshots stay in their own local folders — this is just a pointer/note) ----
+// ---- Evidence: a note and/or a screenshot (e.g. of the assignment email), stored as a BLOB ----
 
-router.post('/tasks/:id/evidence', asyncHandler(async (req, res) => {
+router.post('/tasks/:id/evidence', handleEvidenceUpload, asyncHandler(async (req, res) => {
   const { group_id, note } = req.body;
-  if (!note || !note.trim()) return res.status(400).json({ error: 'note is required' });
+  const file = req.file;
+  const noteText = (note || '').trim() || (file ? '(screenshot evidence)' : '');
+  if (!noteText) return res.status(400).json({ error: 'Provide a note, a screenshot, or both.' });
+
   await db.execute({
-    sql: 'INSERT INTO evidence_notes (task_id, group_id, note, created_at) VALUES (?, ?, ?, ?)',
-    args: [req.params.id, group_id || null, note.trim(), new Date().toISOString()]
+    sql: `INSERT INTO evidence_notes (task_id, group_id, note, created_at, screenshot, screenshot_content_type, screenshot_size_bytes)
+          VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      req.params.id,
+      group_id || null,
+      noteText,
+      new Date().toISOString(),
+      file ? file.buffer : null,
+      file ? file.mimetype : null,
+      file ? file.size : null
+    ]
   });
   res.status(201).json({ ok: true });
+}));
+
+router.get('/evidence/:id/screenshot', asyncHandler(async (req, res) => {
+  const result = await db.execute({
+    sql: 'SELECT screenshot, screenshot_content_type FROM evidence_notes WHERE id = ?',
+    args: [req.params.id]
+  });
+  const row = result.rows[0];
+  if (!row || !row.screenshot) return res.status(404).json({ error: 'No screenshot for this evidence note.' });
+  res.setHeader('Content-Type', row.screenshot_content_type || 'application/octet-stream');
+  res.send(Buffer.from(row.screenshot));
 }));
 
 // ---- Sync ----

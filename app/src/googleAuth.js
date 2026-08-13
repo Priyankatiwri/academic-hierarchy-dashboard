@@ -1,7 +1,10 @@
 const { google } = require('googleapis');
 
+// Full `drive` (not `.readonly`) — revoking student permissions post-deadline is a write
+// operation on the folder's ACL, which readonly can't do. Superset of readonly, so this
+// covers both scanning submissions and revoking access with one scope.
 const SCOPES = [
-  'https://www.googleapis.com/auth/drive.readonly',
+  'https://www.googleapis.com/auth/drive',
   'https://www.googleapis.com/auth/userinfo.email'
 ];
 

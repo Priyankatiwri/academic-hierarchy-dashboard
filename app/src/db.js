@@ -69,8 +69,10 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS idx_events_task_group ON submission_events(task_id, group_id)`,
   `CREATE INDEX IF NOT EXISTS idx_events_status ON submission_events(status)`,
   `CREATE INDEX IF NOT EXISTS idx_events_first_observed ON submission_events(first_observed_at)`,
-  // Screenshot evidence stays in the Prof's own local folders (per requirement) — this is a
-  // free-text note/pointer, not a file upload, so nothing needs to live on server disk.
+  // Evidence: a note plus an optional screenshot (e.g. of the assignment email), stored as a
+  // BLOB rather than a file on disk — consistent with @libsql/client's local-file/Turso duality,
+  // so evidence survives redeploys on hosts with no persistent disk the same way the rest of
+  // the data does.
   `CREATE TABLE IF NOT EXISTS evidence_notes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     task_id INTEGER NOT NULL REFERENCES tasks(id),
@@ -92,13 +94,38 @@ const SCHEMA = [
     groups_discovered INTEGER,
     events_created INTEGER,
     error TEXT
+  )`,
+  // Audit record of every permission actually removed, kept even though `tasks` itself only
+  // needs the single access_revoked_at marker to decide whether to run again.
+  `CREATE TABLE IF NOT EXISTS access_revocations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL REFERENCES tasks(id),
+    permission_id TEXT,
+    permission_type TEXT,
+    email_address TEXT,
+    revoked_at TEXT NOT NULL
   )`
 ];
+
+// Lightweight additive migration: new optional columns on an existing table. SQLite has no
+// "ADD COLUMN IF NOT EXISTS", so add and swallow the "already there" error on repeat boots.
+async function ensureColumn(table, column, type) {
+  try {
+    await db.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  } catch (err) {
+    if (!/duplicate column name/i.test(err.message)) throw err;
+  }
+}
 
 async function initSchema() {
   for (const statement of SCHEMA) {
     await db.execute(statement);
   }
+  await ensureColumn('evidence_notes', 'screenshot', 'BLOB');
+  await ensureColumn('evidence_notes', 'screenshot_content_type', 'TEXT');
+  await ensureColumn('evidence_notes', 'screenshot_size_bytes', 'INTEGER');
+  await ensureColumn('tasks', 'access_revoked_at', 'TEXT');
+  await ensureColumn('tasks', 'access_revoke_error', 'TEXT');
 }
 
 module.exports = { db, initSchema };

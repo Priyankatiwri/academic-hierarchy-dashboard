@@ -32,11 +32,13 @@ old single-page "OAuth consent screen") — the steps below match the current UI
      indefinitely for a small private tool — only listed test users can sign in, and **no
      Google verification review is required**.
    - **Data Access** tab → **Add or remove scopes** → search for and check
-     `https://www.googleapis.com/auth/drive.readonly` → **Update** → **Save**. (`.../auth/userinfo.email`
-     is typically already present under "non-sensitive scopes" by default — add it too if it
-     isn't.) Drive scopes are classified as **restricted**, so Google will nudge you toward
-     verification if you ever try to move to production — ignore that and stay in Testing;
-     verification isn't required for test users.
+     `https://www.googleapis.com/auth/drive` (the **full** scope, not `.../drive.readonly` —
+     the app now also revokes student Drive access after a task's deadline + grace period,
+     which is a write operation the readonly scope can't do) → **Update** → **Save**.
+     (`.../auth/userinfo.email` is typically already present under "non-sensitive scopes" by
+     default — add it too if it isn't.) Drive scopes are classified as **restricted**, so Google
+     will nudge you toward verification if you ever try to move to production — ignore that and
+     stay in Testing; verification isn't required for test users.
    - **Clients** tab → **Create Client** → Application type **Web application** → give it a
      name → under **Authorized redirect URIs** add `http://localhost:3000/auth/google/callback`
      for local dev (add your deployed URL's equivalent later, e.g.
@@ -48,8 +50,16 @@ old single-page "OAuth consent screen") — the steps below match the current UI
    - `GOOGLE_OAUTH_CLIENT_ID`
    - `GOOGLE_OAUTH_CLIENT_SECRET`
    - `GOOGLE_OAUTH_REDIRECT_URI` (must exactly match one of the redirect URIs from the Clients step)
-5. Start the app, open the dashboard, click **Connect Google Drive**, sign in, approve read
-   access. That's it — no per-folder sharing step, no key file to protect.
+5. Start the app, open the dashboard, click **Connect Google Drive**, sign in, approve access.
+   That's it — no per-folder sharing step, no key file to protect.
+
+## ⚠️ If you already had a `drive.readonly` connection from before
+
+Reconnecting with the upgraded scope takes effect immediately — the **next** sync (manual click
+or the 15-minute cron, whichever comes first) will revoke Drive access for every task that's
+already past its deadline + grace period, since that's a one-time action gated only on the task
+not having been revoked yet, not on how recently you reconnected. If you have existing overdue
+tasks you're not ready to lock down yet, hold off reconnecting until you are.
 
 ## If sync starts failing with an auth error
 

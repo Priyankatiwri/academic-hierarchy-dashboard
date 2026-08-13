@@ -255,8 +255,13 @@ function renderLegend() {
 async function loadSubmissions(taskId) {
   const { task, cells, evidence } = await api(`/api/tasks/${taskId}/submissions`);
   renderEvidence(evidence);
-  document.getElementById('task-meta').textContent =
-    `${task.name} — deadline ${new Date(task.deadline_at).toLocaleString()} — on-time window ${task.on_time_window_hours}h`;
+  let metaText = `${task.name} — deadline ${new Date(task.deadline_at).toLocaleString()} — on-time window ${task.on_time_window_hours}h`;
+  if (task.access_revoked_at) {
+    metaText += ` — Drive access revoked ${new Date(task.access_revoked_at).toLocaleString()}`;
+  } else if (task.access_revoke_error) {
+    metaText += ` — Drive access revocation failed: ${task.access_revoke_error}`;
+  }
+  document.getElementById('task-meta').textContent = metaText;
 
   const counts = { 'Before': 0, 'On time': 0, 'After': 0, 'Missing': 0, 'Pending': 0 };
   cells.forEach(c => { counts[c.status] = (counts[c.status] || 0) + 1; });
@@ -310,21 +315,36 @@ function renderEvidence(evidence) {
     <li class="evidence-item">
       ${escapeHtml(e.note)}
       <div class="meta">${e.group_name ? escapeHtml(e.group_name) + ' — ' : ''}${new Date(e.created_at).toLocaleString()}</div>
+      ${e.has_screenshot ? `<img class="screenshot-thumb" src="/api/evidence/${e.id}/screenshot" alt="Evidence screenshot" loading="lazy" />` : ''}
     </li>
   `).join('');
 }
 
 document.getElementById('evidence-submit').addEventListener('click', async () => {
   const textarea = document.getElementById('evidence-note');
+  const fileInput = document.getElementById('evidence-screenshot');
+  const errorEl = document.getElementById('evidence-error');
+  errorEl.textContent = '';
   const note = textarea.value.trim();
-  if (!note || !state.taskId) return;
-  await api(`/api/tasks/${state.taskId}/evidence`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ note })
-  });
-  textarea.value = '';
-  await loadSubmissions(state.taskId);
+  const file = fileInput.files[0];
+  if (!note && !file) {
+    errorEl.textContent = 'Add a note, a screenshot, or both.';
+    return;
+  }
+  if (!state.taskId) return;
+
+  const formData = new FormData();
+  if (note) formData.append('note', note);
+  if (file) formData.append('screenshot', file);
+
+  try {
+    await api(`/api/tasks/${state.taskId}/evidence`, { method: 'POST', body: formData });
+    textarea.value = '';
+    fileInput.value = '';
+    await loadSubmissions(state.taskId);
+  } catch (err) {
+    errorEl.textContent = err.message;
+  }
 });
 
 // ---- Audit report ----

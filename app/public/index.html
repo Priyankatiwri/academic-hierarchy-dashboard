@@ -97,12 +97,16 @@
 
     <section id="evidence-panel" class="panel hidden" aria-labelledby="evidence-heading">
       <div class="panel-header"><h2 id="evidence-heading">Evidence notes</h2></div>
-      <p class="panel-note">Screenshots stay in the Prof's own local folders — this just records where/what, for the audit trail.</p>
+      <p class="panel-note">e.g. a screenshot of the assignment email — stored with the record for the audit trail.</p>
       <ul class="evidence-list" id="evidence-list"></ul>
       <div class="evidence-form">
-        <textarea id="evidence-note" placeholder="e.g. Screenshot saved at D:\Evidence\2025-27\Sem1\DataStructures\Assignment1.png"></textarea>
-        <button id="evidence-submit" class="primary" type="button">Add note</button>
+        <div class="evidence-form-fields">
+          <textarea id="evidence-note" placeholder="Optional note (e.g. which email/date)"></textarea>
+          <input id="evidence-screenshot" type="file" accept="image/*" />
+        </div>
+        <button id="evidence-submit" class="primary" type="button">Add evidence</button>
       </div>
+      <span id="evidence-error" class="form-error"></span>
     </section>
 
     <section class="panel" aria-labelledby="report-heading">
