@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Academic Submission Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="page-header">
+    <div class="brand">
+      <span class="brand-mark icon">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="M3 12l9 5 9-5"/><path d="M3 16l9 5 9-5"/>
+        </svg>
+      </span>
+      <h1>Academic Submission Dashboard</h1>
+    </div>
+    <div class="header-meta">
+      <span id="google-status" class="google-status disconnected">Checking Google connection…</span>
+      <span id="last-sync">Last synced: —</span>
+      <button id="sync-btn" type="button">
+        <span class="icon">
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M13.5 8a5.5 5.5 0 0 1-9.9 3.3M2.5 8a5.5 5.5 0 0 1 9.9-3.3"/><path d="M13.5 4.5V8h-3.5"/><path d="M2.5 11.5V8H6"/>
+          </svg>
+        </span>
+        <span id="sync-label">Sync now</span>
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <section class="nav-panel" aria-label="Navigate hierarchy">
+      <div class="nav-row">
+        <label>
+          <span><span class="step-num">1</span>Batch</span>
+          <select id="batch-select"><option value="">Select batch…</option></select>
+        </label>
+        <button id="new-batch-toggle" type="button">+ New batch</button>
+      </div>
+      <div id="new-batch-form" class="inline-form">
+        <div class="fields">
+          <label>Name<input id="nb-name" type="text" placeholder="e.g. 2025-27" /></label>
+          <label>Start year<input id="nb-start" type="number" placeholder="2025" /></label>
+          <label>End year<input id="nb-end" type="number" placeholder="2027" /></label>
+        </div>
+        <div class="form-actions">
+          <button id="nb-submit" class="primary" type="button">Create batch</button>
+          <span id="nb-error" class="form-error"></span>
+        </div>
+      </div>
+
+      <div id="sem-row" class="nav-row hidden">
+        <label style="min-width:auto">
+          <span><span class="step-num">2</span>Semester</span>
+          <div class="sem-tabs" id="sem-tabs"></div>
+        </label>
+      </div>
+
+      <div id="subject-row" class="nav-row hidden">
+        <label>
+          <span><span class="step-num">3</span>Subject</span>
+          <select id="subject-select"><option value="">Select subject…</option></select>
+        </label>
+        <label>
+          <span><span class="step-num">4</span>Task</span>
+          <select id="task-select"><option value="">Select task…</option></select>
+        </label>
+        <button id="new-task-toggle" type="button">+ New task</button>
+      </div>
+
+      <div id="new-task-form" class="inline-form">
+        <div class="fields">
+          <label>Subject name<input id="nt-subject" type="text" placeholder="e.g. Data Structures" list="existing-subjects" /></label>
+          <datalist id="existing-subjects"></datalist>
+          <label>Task name<input id="nt-name" type="text" placeholder="e.g. Assignment 1" /></label>
+          <label>Drive submission link<input id="nt-link" type="url" placeholder="https://drive.google.com/drive/folders/..." /></label>
+          <label>Deadline (date &amp; time)<input id="nt-deadline" type="datetime-local" /></label>
+        </div>
+        <div class="form-actions">
+          <button id="nt-submit" class="primary" type="button">Create task</button>
+          <span id="nt-error" class="form-error"></span>
+        </div>
+      </div>
+    </section>
+
+    <section id="submissions-panel" class="panel hidden" aria-labelledby="submissions-heading">
+      <div class="panel-header">
+        <h2 id="submissions-heading">Submissions</h2>
+        <ul class="legend" id="legend"></ul>
+      </div>
+      <p class="panel-note" id="task-meta"></p>
+      <div class="stat-row" id="stat-row"></div>
+      <div id="sections"></div>
+    </section>
+
+    <section id="evidence-panel" class="panel hidden" aria-labelledby="evidence-heading">
+      <div class="panel-header"><h2 id="evidence-heading">Evidence notes</h2></div>
+      <p class="panel-note">Screenshots stay in the Prof's own local folders — this just records where/what, for the audit trail.</p>
+      <ul class="evidence-list" id="evidence-list"></ul>
+      <div class="evidence-form">
+        <textarea id="evidence-note" placeholder="e.g. Screenshot saved at D:\Evidence\2025-27\Sem1\DataStructures\Assignment1.png"></textarea>
+        <button id="evidence-submit" class="primary" type="button">Add note</button>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="report-heading">
+      <div class="panel-header"><h2 id="report-heading">Audit report — crossed deadlines</h2></div>
+      <p class="panel-note">Every After/Missing event ever recorded, across batches — pulled from the append-only log, not the live view above.</p>
+      <div class="report-controls">
+        <label>Batch<select id="report-batch"><option value="">All</option></select></label>
+        <label>From<input id="report-from" type="date" /></label>
+        <label>To<input id="report-to" type="date" /></label>
+        <button id="report-download" type="button">Download CSV</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

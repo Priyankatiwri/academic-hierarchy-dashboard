@@ -1,0 +1,19 @@
+{
+  "name": "academic-hierarchy-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Batch/semester/subject/task dashboard for Drive-based group assignment submissions, with deadline cross-tracking and an audit report.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "sync": "node scripts/sync-once.js"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.14.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "googleapis": "^144.0.0",
+    "node-cron": "^3.0.3"
+  }
+}
