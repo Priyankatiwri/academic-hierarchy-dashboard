@@ -1,22 +1,23 @@
 const STATUS_COLORS = {
-  'Before': 'var(--status-before)',
   'On time': 'var(--status-good)',
   'After': 'var(--status-warning)',
-  'Missing': 'var(--status-critical)',
-  'Pending': 'var(--text-muted)'
+  'Missing': 'var(--status-critical)'
 };
-const STATUS_ORDER = ['Before', 'On time', 'After', 'Missing', 'Pending'];
+const STATUS_ORDER = ['On time', 'After', 'Missing'];
 
 const ICONS = {
-  'Before': '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/><path d="M8 4.5V8l2.5 1.5"/></svg>',
   'On time': '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/><path d="M5.3 8.3l1.9 1.9 3.6-3.9"/></svg>',
   'After': '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.6 14 13H2L8 2.6Z"/><path d="M8 6.4V9.4"/><circle cx="8" cy="11.3" r="0.6" fill="currentColor" stroke="none"/></svg>',
-  'Missing': '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/><path d="M5.8 5.8l4.4 4.4M10.2 5.8l-4.4 4.4"/></svg>',
-  'Pending': '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="2.2 2.2"><circle cx="8" cy="8" r="6.25"/></svg>'
+  'Missing': '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/><path d="M5.8 5.8l4.4 4.4M10.2 5.8l-4.4 4.4"/></svg>'
 };
 
 const ACCOUNT_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5.5" r="2.3"/><path d="M3 13c0-2.8 2.2-4.5 5-4.5s5 1.7 5 4.5"/></svg>';
 const INBOX_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13V6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v7"/><path d="M4 13h4.5l1 2h5l1-2H20"/><path d="M4 13v5a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5"/></svg>';
+const TOAST_ICONS = {
+  success: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/><path d="M5.3 8.3l1.9 1.9 3.6-3.9"/></svg>',
+  error: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/><path d="M5.8 5.8l4.4 4.4M10.2 5.8l-4.4 4.4"/></svg>',
+  close: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>'
+};
 
 function statusSlug(status) {
   return 'status-' + status.toLowerCase().replace(/\s+/g, '-');
@@ -40,6 +41,50 @@ async function api(path, opts) {
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
 }
+
+// ---- Toasts ----
+
+function showToast(message, type = 'success') {
+  const stack = document.getElementById('toast-stack');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.innerHTML = `
+    <span class="icon">${TOAST_ICONS[type]}</span>
+    <span>${escapeHtml(message)}</span>
+    <button class="toast-close" type="button" aria-label="Dismiss"><span class="icon">${TOAST_ICONS.close}</span></button>
+  `;
+  const remove = () => {
+    toast.classList.add('leaving');
+    setTimeout(() => toast.remove(), 200);
+  };
+  toast.querySelector('.toast-close').addEventListener('click', remove);
+  stack.appendChild(toast);
+  setTimeout(remove, 5000);
+}
+
+// ---- Date/time picker with an explicit OK confirm step ----
+
+function wireDateTimeConfirm(inputId, okBtnId) {
+  const input = document.getElementById(inputId);
+  const okBtn = document.getElementById(okBtnId);
+  okBtn.addEventListener('click', () => {
+    if (!input.value) return;
+    input.classList.add('confirmed');
+    okBtn.classList.add('confirmed');
+  });
+  input.addEventListener('input', () => {
+    input.classList.remove('confirmed');
+    okBtn.classList.remove('confirmed');
+  });
+}
+
+function resetDateTimeConfirm(inputId, okBtnId) {
+  document.getElementById(inputId).classList.remove('confirmed');
+  document.getElementById(okBtnId).classList.remove('confirmed');
+}
+
+wireDateTimeConfirm('nt-deadline', 'nt-deadline-ok');
+wireDateTimeConfirm('ed-deadline', 'ed-deadline-ok');
 
 // ---- Google connection status ----
 
@@ -78,11 +123,12 @@ document.getElementById('sync-btn').addEventListener('click', async () => {
   btn.classList.add('syncing');
   label.textContent = 'Syncing…';
   try {
-    await api('/api/sync', { method: 'POST' });
+    const result = await api('/api/sync', { method: 'POST' });
     await loadMeta();
     if (state.taskId) await loadSubmissions(state.taskId);
+    showToast(`Sync complete — ${result.eventsCreated ?? 0} new event(s).`, 'success');
   } catch (err) {
-    alert('Sync failed: ' + err.message);
+    showToast('Sync failed: ' + err.message, 'error');
   } finally {
     btn.disabled = false;
     btn.classList.remove('syncing');
@@ -129,6 +175,7 @@ document.getElementById('nb-submit').addEventListener('click', async () => {
     document.getElementById('nb-end').value = '';
     await loadBatches(batch.id);
     onBatchChange();
+    showToast(`Batch "${name}" created.`, 'success');
   } catch (err) {
     errorEl.textContent = err.message;
   }
@@ -188,6 +235,7 @@ async function onSubjectChange() {
 document.getElementById('task-select').addEventListener('change', () => {
   const taskId = document.getElementById('task-select').value;
   state.taskId = taskId || null;
+  document.getElementById('extend-deadline-form').classList.remove('open');
   if (taskId) {
     loadSubmissions(taskId);
     document.getElementById('submissions-panel').classList.remove('hidden');
@@ -238,7 +286,46 @@ document.getElementById('nt-submit').addEventListener('click', async () => {
     document.getElementById('nt-name').value = '';
     document.getElementById('nt-link').value = '';
     document.getElementById('nt-deadline').value = '';
+    resetDateTimeConfirm('nt-deadline', 'nt-deadline-ok');
     await onSemesterChange(state.semesterId, document.querySelector('#sem-tabs button.active'));
+    showToast(`Task "${name}" created.`, 'success');
+  } catch (err) {
+    errorEl.textContent = err.message;
+  }
+});
+
+// ---- Extend deadline ----
+
+document.getElementById('extend-deadline-toggle').addEventListener('click', () => {
+  const form = document.getElementById('extend-deadline-form');
+  form.classList.toggle('open');
+});
+
+document.getElementById('ed-cancel').addEventListener('click', () => {
+  document.getElementById('extend-deadline-form').classList.remove('open');
+  document.getElementById('ed-error').textContent = '';
+});
+
+document.getElementById('ed-submit').addEventListener('click', async () => {
+  const errorEl = document.getElementById('ed-error');
+  errorEl.textContent = '';
+  const deadlineLocal = document.getElementById('ed-deadline').value;
+  if (!deadlineLocal) { errorEl.textContent = 'Pick a new deadline.'; return; }
+  if (!state.taskId) return;
+
+  try {
+    const deadline_at = new Date(deadlineLocal).toISOString();
+    await api(`/api/tasks/${state.taskId}/deadline`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deadline_at })
+    });
+    document.getElementById('extend-deadline-form').classList.remove('open');
+    document.getElementById('ed-deadline').value = '';
+    resetDateTimeConfirm('ed-deadline', 'ed-deadline-ok');
+    await loadSubmissions(state.taskId);
+    await onSubjectChange(); // refresh the task dropdown's "due ..." label too
+    showToast('Deadline updated.', 'success');
   } catch (err) {
     errorEl.textContent = err.message;
   }
@@ -255,7 +342,8 @@ function renderLegend() {
 async function loadSubmissions(taskId) {
   const { task, cells, evidence } = await api(`/api/tasks/${taskId}/submissions`);
   renderEvidence(evidence);
-  let metaText = `${task.name} — deadline ${new Date(task.deadline_at).toLocaleString()} — on-time window ${task.on_time_window_hours}h`;
+
+  let metaText = `${task.name} — deadline ${new Date(task.deadline_at).toLocaleString()}`;
   if (task.access_revoked_at) {
     metaText += ` — Drive access revoked ${new Date(task.access_revoked_at).toLocaleString()}`;
   } else if (task.access_revoke_error) {
@@ -263,7 +351,7 @@ async function loadSubmissions(taskId) {
   }
   document.getElementById('task-meta').textContent = metaText;
 
-  const counts = { 'Before': 0, 'On time': 0, 'After': 0, 'Missing': 0, 'Pending': 0 };
+  const counts = { 'On time': 0, 'After': 0, 'Missing': 0 };
   cells.forEach(c => { counts[c.status] = (counts[c.status] || 0) + 1; });
   document.getElementById('stat-row').innerHTML = STATUS_ORDER.map(s => `
     <div class="stat-tile" style="border-top-color:${STATUS_COLORS[s]}">
@@ -278,7 +366,7 @@ async function loadSubmissions(taskId) {
 
   const sectionsEl = document.getElementById('sections');
   if (cells.length === 0) {
-    sectionsEl.innerHTML = `<div class="empty-state"><span class="icon">${INBOX_ICON}</span>No groups discovered yet for this task — run Sync, or check the Drive submission link.</div>`;
+    sectionsEl.innerHTML = `<div class="empty-state"><span class="icon">${INBOX_ICON}</span>Nothing to report yet for this task — run Sync, or check the Drive submission link.</div>`;
     return;
   }
 
@@ -342,6 +430,7 @@ document.getElementById('evidence-submit').addEventListener('click', async () =>
     textarea.value = '';
     fileInput.value = '';
     await loadSubmissions(state.taskId);
+    showToast('Evidence added.', 'success');
   } catch (err) {
     errorEl.textContent = err.message;
   }

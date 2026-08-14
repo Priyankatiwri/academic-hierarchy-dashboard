@@ -2,13 +2,10 @@ const { db } = require('./db');
 const { getAuthorizedClient } = require('./googleAuth');
 const { buildDriveClient, listFilesInFolder, revokeNonOwnerPermissions } = require('./driveConnector');
 
-function computeStatus(submittedAt, deadlineAt, onTimeWindowHours) {
+function computeStatus(submittedAt, deadlineAt) {
   const deadline = new Date(deadlineAt);
-  const windowStart = new Date(deadline.getTime() - onTimeWindowHours * 3600 * 1000);
   const submitted = new Date(submittedAt);
-  if (submitted > deadline) return 'After';
-  if (submitted >= windowStart) return 'On time';
-  return 'Before';
+  return submitted > deadline ? 'After' : 'On time';
 }
 
 /**
@@ -62,7 +59,7 @@ async function syncTask(drive, task, connectedEmail) {
     const { id: groupId, isNew } = await getOrCreateGroup(task.subject_id, groupName);
     if (isNew) groupsDiscovered += 1;
 
-    const status = computeStatus(file.createdTime, task.deadline_at, task.on_time_window_hours);
+    const status = computeStatus(file.createdTime, task.deadline_at);
     const existing = await db.execute({
       sql: 'SELECT file_name FROM submission_events WHERE event_key = ?',
       args: [file.id]

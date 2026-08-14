@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Academic Submission Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Crect%20width='24'%20height='24'%20rx='6'%20fill='%232a78d6'/%3E%3Cpath%20d='M12%204%204%208.5l8%204.5%208-4.5L12%204Z'%20fill='none'%20stroke='white'%20stroke-width='1.8'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3Cpath%20d='M4%2012.5l8%204.5%208-4.5'%20fill='none'%20stroke='white'%20stroke-width='1.8'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3Cpath%20d='M4%2016.5l8%204.5%208-4.5'%20fill='none'%20stroke='white'%20stroke-width='1.8'%20stroke-linecap='round'%20stroke-linejoin='round'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -76,7 +77,16 @@
           <datalist id="existing-subjects"></datalist>
           <label>Task name<input id="nt-name" type="text" placeholder="e.g. Assignment 1" /></label>
           <label>Drive submission link<input id="nt-link" type="url" placeholder="https://drive.google.com/drive/folders/..." /></label>
-          <label>Deadline (date &amp; time)<input id="nt-deadline" type="datetime-local" /></label>
+          <label>
+            Deadline (date &amp; time)
+            <div class="datetime-confirm">
+              <input id="nt-deadline" type="datetime-local" />
+              <button type="button" class="ok-btn" id="nt-deadline-ok" title="Confirm date &amp; time">
+                <span class="icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-6.5"/></svg></span>
+                OK
+              </button>
+            </div>
+          </label>
         </div>
         <div class="form-actions">
           <button id="nt-submit" class="primary" type="button">Create task</button>
@@ -87,16 +97,53 @@
 
     <section id="submissions-panel" class="panel hidden" aria-labelledby="submissions-heading">
       <div class="panel-header">
-        <h2 id="submissions-heading">Submissions</h2>
-        <ul class="legend" id="legend"></ul>
+        <h2 id="submissions-heading">
+          <span class="icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 5h9M7 10h9M7 15h9"/><circle cx="3.2" cy="5" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="10" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="15" r="0.9" fill="currentColor" stroke="none"/></svg></span>
+          Submissions
+        </h2>
+        <div class="panel-header-actions">
+          <ul class="legend" id="legend"></ul>
+          <button id="extend-deadline-toggle" type="button" class="subtle">
+            <span class="icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 6.5h12M5 2v2.5M11 2v2.5"/><path d="M6 10.5l1.5 1.5L11 8.5"/></svg></span>
+            Extend deadline
+          </button>
+        </div>
       </div>
-      <p class="panel-note" id="task-meta"></p>
+      <div class="task-meta-row">
+        <p class="panel-note" id="task-meta"></p>
+      </div>
+
+      <div id="extend-deadline-form" class="inline-form">
+        <div class="fields">
+          <label>
+            New deadline (date &amp; time)
+            <div class="datetime-confirm">
+              <input id="ed-deadline" type="datetime-local" />
+              <button type="button" class="ok-btn" id="ed-deadline-ok" title="Confirm date &amp; time">
+                <span class="icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-6.5"/></svg></span>
+                OK
+              </button>
+            </div>
+          </label>
+        </div>
+        <div class="form-actions">
+          <button id="ed-submit" class="primary" type="button">Save new deadline</button>
+          <button id="ed-cancel" type="button" class="subtle">Cancel</button>
+          <span id="ed-error" class="form-error"></span>
+        </div>
+      </div>
+
       <div class="stat-row" id="stat-row"></div>
       <div id="sections"></div>
     </section>
 
     <section id="evidence-panel" class="panel hidden" aria-labelledby="evidence-heading">
-      <div class="panel-header"><h2 id="evidence-heading">Evidence notes</h2></div>
+      <div class="panel-header">
+        <h2 id="evidence-heading">
+          <span class="icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a1 1 0 0 1 1-1h1.5l1-1.5h5l1 1.5H17a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Z"/><circle cx="10" cy="11" r="3"/></svg></span>
+          Evidence notes
+        </h2>
+      </div>
       <p class="panel-note">e.g. a screenshot of the assignment email — stored with the record for the audit trail.</p>
       <ul class="evidence-list" id="evidence-list"></ul>
       <div class="evidence-form">
@@ -110,7 +157,12 @@
     </section>
 
     <section class="panel" aria-labelledby="report-heading">
-      <div class="panel-header"><h2 id="report-heading">Audit report — crossed deadlines</h2></div>
+      <div class="panel-header">
+        <h2 id="report-heading">
+          <span class="icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2.5 16.5 5v5c0 4-2.8 6.7-6.5 8-3.7-1.3-6.5-4-6.5-8V5L10 2.5Z"/><path d="M7.3 10l1.8 1.8 3.6-3.8"/></svg></span>
+          Audit report — crossed deadlines
+        </h2>
+      </div>
       <p class="panel-note">Every After/Missing event ever recorded, across batches — pulled from the append-only log, not the live view above.</p>
       <div class="report-controls">
         <label>Batch<select id="report-batch"><option value="">All</option></select></label>
@@ -120,6 +172,8 @@
       </div>
     </section>
   </main>
+
+  <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
 
   <script src="app.js"></script>
 </body>

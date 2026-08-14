@@ -128,6 +128,25 @@ router.post('/tasks', asyncHandler(async (req, res) => {
   res.status(201).json({ id: Number(inserted.lastInsertRowid), subject_id: subjectId });
 }));
 
+router.patch('/tasks/:id/deadline', asyncHandler(async (req, res) => {
+  const { deadline_at } = req.body;
+  if (!deadline_at) return res.status(400).json({ error: 'deadline_at is required' });
+
+  const existing = await db.execute({ sql: 'SELECT id FROM tasks WHERE id = ?', args: [req.params.id] });
+  if (existing.rows.length === 0) return res.status(404).json({ error: 'Task not found' });
+
+  // Resetting access_revoked_at re-arms the Missing/revocation logic against the new deadline —
+  // it does NOT retroactively undo an already-finalized Missing marker (the audit log is
+  // append-only), and does NOT automatically restore any Drive access already revoked; Google
+  // doesn't let you recreate a deleted permission's old ID, so re-sharing the folder with
+  // affected students is a manual step if that already happened.
+  await db.execute({
+    sql: 'UPDATE tasks SET deadline_at = ?, access_revoked_at = NULL, access_revoke_error = NULL WHERE id = ?',
+    args: [deadline_at, req.params.id]
+  });
+  res.json({ ok: true });
+}));
+
 // ---- Submissions for a task, sectioned by label ----
 
 router.get('/tasks/:id/submissions', asyncHandler(async (req, res) => {
@@ -155,14 +174,20 @@ router.get('/tasks/:id/submissions', asyncHandler(async (req, res) => {
     args: [taskId, taskId, taskId, task.rows[0].subject_id]
   });
 
-  const cells = result.rows.map(r => ({
-    group_id: r.group_id,
-    group_name: r.group_name,
-    status: r.status || (r.missing_status ? 'Missing' : 'Pending'),
-    file_name: r.file_name,
-    web_view_link: r.web_view_link,
-    submitted_at: r.submitted_at
-  }));
+  // 'Before' only exists in older historical rows (pre-simplification) — fold it into 'On time'
+  // for display. A group with neither a submission nor a finalized Missing marker yet (still
+  // waiting, deadline not passed) has nothing to report — leave it out entirely rather than
+  // labeling it, since there's no "Pending" status anymore.
+  const cells = result.rows
+    .map(r => ({
+      group_id: r.group_id,
+      group_name: r.group_name,
+      status: r.status === 'Before' ? 'On time' : r.status || (r.missing_status ? 'Missing' : null),
+      file_name: r.file_name,
+      web_view_link: r.web_view_link,
+      submitted_at: r.submitted_at
+    }))
+    .filter(c => c.status !== null);
 
   const evidence = await db.execute({
     sql: `SELECT e.id, e.task_id, e.group_id, e.note, e.created_at, e.screenshot_content_type,
