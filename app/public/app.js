@@ -343,14 +343,18 @@ function renderLegend() {
 
 // ---- Submissions (sectioned by label) ----
 
-function renderAggregateTile(submitted, total) {
-  const pct = total > 0 ? Math.round((submitted / total) * 100) : 0;
-  const value = total > 0 ? `${submitted} / ${total}` : '—';
+function renderAggregateTile(onTime, after) {
+  const total = onTime + after;
+  const onTimePct = total > 0 ? (onTime / total) * 100 : 0;
+  const afterPct = total > 0 ? (after / total) * 100 : 0;
   return `
     <div class="stat-tile stat-tile-aggregate">
-      <span class="stat-label"><span class="icon">${GROUPS_ICON}</span>Submitted</span>
-      <span class="stat-value">${value}</span>
-      <div class="stat-progress"><div class="stat-progress-fill" style="width:${pct}%"></div></div>
+      <span class="stat-label"><span class="icon">${GROUPS_ICON}</span>Total Submissions</span>
+      <span class="stat-value">${total}</span>
+      <div class="stat-progress stat-progress-split">
+        ${onTimePct > 0 ? `<div class="stat-progress-fill" style="width:${onTimePct}%; background:var(--status-good)"></div>` : ''}
+        ${afterPct > 0 ? `<div class="stat-progress-fill" style="width:${afterPct}%; background:var(--status-warning)"></div>` : ''}
+      </div>
     </div>
   `;
 }
@@ -369,8 +373,6 @@ async function loadSubmissions(taskId) {
 
   const counts = { 'On time': 0, 'After': 0 };
   cells.forEach(c => { if (c.status in counts) counts[c.status] += 1; });
-  const missingCount = cells.filter(c => c.status === 'Missing').length;
-  const submittedCount = cells.length - missingCount;
 
   document.getElementById('stat-row').innerHTML =
     STATUS_ORDER.map(s => `
@@ -378,7 +380,7 @@ async function loadSubmissions(taskId) {
         <span class="stat-label"><span class="icon">${ICONS[s]}</span>${s}</span>
         <span class="stat-value">${counts[s]}</span>
       </div>
-    `).join('') + renderAggregateTile(submittedCount, cells.length);
+    `).join('') + renderAggregateTile(counts['On time'], counts['After']);
 
   // On time/After get itemized sections; Missing is represented only in the aggregate tile above.
   const bySection = {};

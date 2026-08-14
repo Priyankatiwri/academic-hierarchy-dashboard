@@ -262,6 +262,8 @@ main {
 .stat-tile-aggregate .stat-label .icon { color: var(--accent); }
 .stat-progress { height: 4px; border-radius: 999px; background: var(--gridline); overflow: hidden; margin-top: 2px; }
 .stat-progress-fill { height: 100%; background: var(--accent); border-radius: inherit; transition: width 300ms var(--ease); }
+.stat-progress-split { display: flex; gap: 2px; background: var(--gridline); }
+.stat-progress-split .stat-progress-fill { border-radius: 999px; flex: none; }
 
 /* ---------- Submission sections ---------- */
 
