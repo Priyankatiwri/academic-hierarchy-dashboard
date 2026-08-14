@@ -258,6 +258,11 @@ main {
 .stat-tile .stat-label .icon { width: 14px; height: 14px; }
 .stat-tile .stat-value { font-size: 1.7rem; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 
+.stat-tile-aggregate { border-top-color: var(--accent); }
+.stat-tile-aggregate .stat-label .icon { color: var(--accent); }
+.stat-progress { height: 4px; border-radius: 999px; background: var(--gridline); overflow: hidden; margin-top: 2px; }
+.stat-progress-fill { height: 100%; background: var(--accent); border-radius: inherit; transition: width 300ms var(--ease); }
+
 /* ---------- Submission sections ---------- */
 
 .section-group { margin-bottom: 20px; }

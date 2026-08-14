@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const { db } = require('../db');
-const { runSync } = require('../sync');
+const { runSync, computeStatus } = require('../sync');
 
 const router = express.Router();
 
@@ -144,7 +144,29 @@ router.patch('/tasks/:id/deadline', asyncHandler(async (req, res) => {
     sql: 'UPDATE tasks SET deadline_at = ?, access_revoked_at = NULL, access_revoke_error = NULL WHERE id = ?',
     args: [deadline_at, req.params.id]
   });
-  res.json({ ok: true });
+
+  // Re-evaluate every real submission's On time/After label against the new deadline.
+  // submitted_at and first_observed_at are untouched — the fact of when something was
+  // submitted never changes — but status is a *derived* field (a function of submitted_at and
+  // deadline_at), so when the deadline itself moves, the label needs to move with it. This is
+  // exactly the point of extending a deadline: a submission that was late against the old date
+  // should read as on time against the new one. Existing Missing markers aren't touched here —
+  // if that group later submits, the "current status" view already prefers the real submission
+  // over the marker, so no separate handling is needed for that case.
+  const events = await db.execute({
+    sql: 'SELECT id, submitted_at, status FROM submission_events WHERE task_id = ? AND drive_file_id IS NOT NULL',
+    args: [req.params.id]
+  });
+  let remapped = 0;
+  for (const ev of events.rows) {
+    const newStatus = computeStatus(ev.submitted_at, deadline_at);
+    if (newStatus !== ev.status) {
+      await db.execute({ sql: 'UPDATE submission_events SET status = ? WHERE id = ?', args: [newStatus, ev.id] });
+      remapped += 1;
+    }
+  }
+
+  res.json({ ok: true, remapped });
 }));
 
 // ---- Submissions for a task, sectioned by label ----

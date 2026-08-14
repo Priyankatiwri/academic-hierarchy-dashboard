@@ -3,7 +3,9 @@ const STATUS_COLORS = {
   'After': 'var(--status-warning)',
   'Missing': 'var(--status-critical)'
 };
-const STATUS_ORDER = ['On time', 'After', 'Missing'];
+// Only these two get an itemized section + legend entry — Missing is folded into the
+// "Submitted X/Y" aggregate tile instead of a per-group callout list (see renderAggregateTile).
+const STATUS_ORDER = ['On time', 'After'];
 
 const ICONS = {
   'On time': '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/><path d="M5.3 8.3l1.9 1.9 3.6-3.9"/></svg>',
@@ -13,6 +15,7 @@ const ICONS = {
 
 const ACCOUNT_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5.5" r="2.3"/><path d="M3 13c0-2.8 2.2-4.5 5-4.5s5 1.7 5 4.5"/></svg>';
 const INBOX_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13V6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v7"/><path d="M4 13h4.5l1 2h5l1-2H20"/><path d="M4 13v5a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5"/></svg>';
+const GROUPS_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="6" r="2"/><circle cx="11" cy="6.5" r="1.6"/><path d="M2 13c0-2.2 1.6-3.5 3.5-3.5S9 10.8 9 13"/><path d="M9.5 9.8c1.6.1 2.8 1.3 2.8 3.2"/></svg>';
 const TOAST_ICONS = {
   success: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/><path d="M5.3 8.3l1.9 1.9 3.6-3.9"/></svg>',
   error: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.25"/><path d="M5.8 5.8l4.4 4.4M10.2 5.8l-4.4 4.4"/></svg>',
@@ -315,7 +318,7 @@ document.getElementById('ed-submit').addEventListener('click', async () => {
 
   try {
     const deadline_at = new Date(deadlineLocal).toISOString();
-    await api(`/api/tasks/${state.taskId}/deadline`, {
+    const result = await api(`/api/tasks/${state.taskId}/deadline`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ deadline_at })
@@ -325,7 +328,8 @@ document.getElementById('ed-submit').addEventListener('click', async () => {
     resetDateTimeConfirm('ed-deadline', 'ed-deadline-ok');
     await loadSubmissions(state.taskId);
     await onSubjectChange(); // refresh the task dropdown's "due ..." label too
-    showToast('Deadline updated.', 'success');
+    const remapNote = result.remapped ? ` (${result.remapped} submission${result.remapped === 1 ? '' : 's'} relabeled)` : '';
+    showToast(`Deadline updated.${remapNote}`, 'success');
   } catch (err) {
     errorEl.textContent = err.message;
   }
@@ -339,6 +343,18 @@ function renderLegend() {
 
 // ---- Submissions (sectioned by label) ----
 
+function renderAggregateTile(submitted, total) {
+  const pct = total > 0 ? Math.round((submitted / total) * 100) : 0;
+  const value = total > 0 ? `${submitted} / ${total}` : '—';
+  return `
+    <div class="stat-tile stat-tile-aggregate">
+      <span class="stat-label"><span class="icon">${GROUPS_ICON}</span>Submitted</span>
+      <span class="stat-value">${value}</span>
+      <div class="stat-progress"><div class="stat-progress-fill" style="width:${pct}%"></div></div>
+    </div>
+  `;
+}
+
 async function loadSubmissions(taskId) {
   const { task, cells, evidence } = await api(`/api/tasks/${taskId}/submissions`);
   renderEvidence(evidence);
@@ -351,18 +367,23 @@ async function loadSubmissions(taskId) {
   }
   document.getElementById('task-meta').textContent = metaText;
 
-  const counts = { 'On time': 0, 'After': 0, 'Missing': 0 };
-  cells.forEach(c => { counts[c.status] = (counts[c.status] || 0) + 1; });
-  document.getElementById('stat-row').innerHTML = STATUS_ORDER.map(s => `
-    <div class="stat-tile" style="border-top-color:${STATUS_COLORS[s]}">
-      <span class="stat-label"><span class="icon">${ICONS[s]}</span>${s}</span>
-      <span class="stat-value">${counts[s]}</span>
-    </div>
-  `).join('');
+  const counts = { 'On time': 0, 'After': 0 };
+  cells.forEach(c => { if (c.status in counts) counts[c.status] += 1; });
+  const missingCount = cells.filter(c => c.status === 'Missing').length;
+  const submittedCount = cells.length - missingCount;
 
+  document.getElementById('stat-row').innerHTML =
+    STATUS_ORDER.map(s => `
+      <div class="stat-tile" style="border-top-color:${STATUS_COLORS[s]}">
+        <span class="stat-label"><span class="icon">${ICONS[s]}</span>${s}</span>
+        <span class="stat-value">${counts[s]}</span>
+      </div>
+    `).join('') + renderAggregateTile(submittedCount, cells.length);
+
+  // On time/After get itemized sections; Missing is represented only in the aggregate tile above.
   const bySection = {};
   STATUS_ORDER.forEach(s => { bySection[s] = []; });
-  cells.forEach(c => bySection[c.status].push(c));
+  cells.forEach(c => { if (c.status in bySection) bySection[c.status].push(c); });
 
   const sectionsEl = document.getElementById('sections');
   if (cells.length === 0) {
