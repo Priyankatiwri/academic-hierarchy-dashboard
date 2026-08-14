@@ -1,5 +1,8 @@
 # Academic Submission Dashboard
 
+> New to this project, or setting it up for the first time? **[GETTING_STARTED.md](GETTING_STARTED.md)**
+> is a plain-language, step-by-step version of everything below, including free hosting.
+
 Implementation of the design in [../architecture.md](../architecture.md),
 [../sequence-flows.md](../sequence-flows.md), [../design-options.md](../design-options.md), and
 [../schema.md](../schema.md). Built, installed, and smoke-tested end to end (see "What's been
